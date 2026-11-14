@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from app import app, inventory
@@ -139,3 +141,70 @@ def test_delete_missing_inventory_item_returns_404(client):
     response = client.delete("/inventory/999")
 
     assert response.status_code == 404
+
+
+@patch("app.get_product_by_barcode")
+def test_external_barcode_route_returns_product(
+    mock_lookup,
+    client,
+):
+    mock_lookup.return_value = {
+        "name": "Nutella",
+        "barcode": "3017624010701",
+        "brand": "Ferrero",
+        "category": "Spreads",
+        "source": "Open Food Facts",
+    }
+
+    response = client.get(
+        "/external/barcode/3017624010701"
+    )
+
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["name"] == "Nutella"
+    assert data["barcode"] == "3017624010701"
+
+
+@patch("app.get_product_by_barcode")
+def test_external_barcode_route_returns_404_when_missing(
+    mock_lookup,
+    client,
+):
+    mock_lookup.return_value = None
+
+    response = client.get(
+        "/external/barcode/9999999999999"
+    )
+
+    assert response.status_code == 404
+
+
+@patch("app.search_product_by_name")
+def test_external_search_route_returns_product(
+    mock_search,
+    client,
+):
+    mock_search.return_value = {
+        "name": "Nutella",
+        "barcode": "3017624010701",
+        "brand": "Ferrero",
+        "category": "Spreads",
+        "source": "Open Food Facts",
+    }
+
+    response = client.get(
+        "/external/search?name=Nutella"
+    )
+
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["name"] == "Nutella"
+
+
+def test_external_search_route_requires_name(client):
+    response = client.get("/external/search")
+
+    assert response.status_code == 400
