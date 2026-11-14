@@ -1,5 +1,11 @@
 from flask import Flask, jsonify, request
 
+from external_api import (
+    OpenFoodFactsError,
+    get_product_by_barcode,
+    search_product_by_name,
+)
+
 app = Flask(__name__)
 
 
@@ -69,7 +75,10 @@ def validate_item_data(data, partial=False):
             return "price must be a non-negative number."
 
     if "barcode" in data:
-        if data["barcode"] is not None and not isinstance(data["barcode"], str):
+        if data["barcode"] is not None and not isinstance(
+            data["barcode"],
+            str,
+        ):
             return "barcode must be a string."
 
     return None
@@ -97,7 +106,11 @@ def get_inventory_item(item_id):
     item = find_inventory_item(item_id)
 
     if item is None:
-        return jsonify({"error": "Inventory item not found"}), 404
+        return jsonify(
+            {
+                "error": "Inventory item not found"
+            }
+        ), 404
 
     return jsonify(item), 200
 
@@ -110,7 +123,11 @@ def create_inventory_item():
     error = validate_item_data(data)
 
     if error:
-        return jsonify({"error": error}), 400
+        return jsonify(
+            {
+                "error": error
+            }
+        ), 400
 
     next_id = max(
         (item["id"] for item in inventory),
@@ -136,7 +153,11 @@ def update_inventory_item(item_id):
     item = find_inventory_item(item_id)
 
     if item is None:
-        return jsonify({"error": "Inventory item not found"}), 404
+        return jsonify(
+            {
+                "error": "Inventory item not found"
+            }
+        ), 404
 
     data = request.get_json(silent=True)
 
@@ -147,10 +168,17 @@ def update_inventory_item(item_id):
             }
         ), 400
 
-    error = validate_item_data(data, partial=True)
+    error = validate_item_data(
+        data,
+        partial=True,
+    )
 
     if error:
-        return jsonify({"error": error}), 400
+        return jsonify(
+            {
+                "error": error
+            }
+        ), 400
 
     allowed_fields = {
         "name",
@@ -180,17 +208,83 @@ def delete_inventory_item(item_id):
     item = find_inventory_item(item_id)
 
     if item is None:
-        return jsonify({"error": "Inventory item not found"}), 404
+        return jsonify(
+            {
+                "error": "Inventory item not found"
+            }
+        ), 404
 
     inventory.remove(item)
 
     return "", 204
 
 
+@app.route("/external/barcode/<barcode>", methods=["GET"])
+def lookup_external_product_by_barcode(barcode):
+    """Look up a product in Open Food Facts by barcode."""
+    try:
+        product = get_product_by_barcode(barcode)
+
+    except OpenFoodFactsError as error:
+        return jsonify(
+            {
+                "error": str(error)
+            }
+        ), 502
+
+    if product is None:
+        return jsonify(
+            {
+                "error": "Product not found"
+            }
+        ), 404
+
+    return jsonify(product), 200
+
+
+@app.route("/external/search", methods=["GET"])
+def lookup_external_product_by_name():
+    """Look up a product in Open Food Facts by product name."""
+    name = request.args.get(
+        "name",
+        "",
+    ).strip()
+
+    if not name:
+        return jsonify(
+            {
+                "error": "Product name is required"
+            }
+        ), 400
+
+    try:
+        product = search_product_by_name(name)
+
+    except OpenFoodFactsError as error:
+        return jsonify(
+            {
+                "error": str(error)
+            }
+        ), 502
+
+    if product is None:
+        return jsonify(
+            {
+                "error": "Product not found"
+            }
+        ), 404
+
+    return jsonify(product), 200
+
+
 @app.errorhandler(404)
 def route_not_found(error):
     """Return JSON instead of Flask's default HTML 404 page."""
-    return jsonify({"error": "Resource not found"}), 404
+    return jsonify(
+        {
+            "error": "Resource not found"
+        }
+    ), 404
 
 
 if __name__ == "__main__":
